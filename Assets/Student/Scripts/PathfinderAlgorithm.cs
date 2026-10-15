@@ -9,10 +9,185 @@ public static class PathfindingAlgorithm
     // Metod för att hitta den kortaste vägen från start till goal i labyrinten
     public static List<Vector2Int> FindShortestPath(Vector2Int start, Vector2Int goal, IMapData mapData)
     {
-        // Most of your solution should be implemented in this method.
+        // Steg 1 (innan BFS). Ta reda på vilka grannar en ruta har:
+        // (varje ruta i labyrinten är en nod. En kant kopplar ihop två rutor som går att förflytta sig direkt mellan. Ignorera kostnad för BFS steget)
+        //
+        // 1. Vilka fyra grannar kan en ruta ha?
+        // kontrollera för varje granne:
+        // * ligger grannan innanför labyrintens gränser?
+        // * Finns det en vägg mellan rutorna?
+        //
+        // 2. Hur kontrollerar vi gränserna?
+        // om labyrinten är t.ex Width = 10 och Height = 10, då är giltiga koordinater: x: 0 till 9, y: 0 till 9
+        // fär en ruta på (0, 2) är den vänstra grannen (-1, 2), den ligger utanför labyrinten (ska ignorera negativa koordinater)
+        // Kan kontrollera gränserna med kod som t.ex:
+        // if (x > 0) { det finns en ruta till vänster }   if (x < mapData.Width - 1) { det finns en ruta till höger }  (samma med y, för upp eller ner)
+        //
+        // 3. En skillnad från IsMovementBlocked()
+        // IsMovementBlocked() metoden är användbar till senare när man använder djikstra och ska tänka på vikten, men behövs inte för BFS versionen (steg 1)
+        // första versionen (BFS) ska istället använda: HasVerticalWall() och HasHorizontalWall() för att avgöra om vägen är blockerad eller inte.
+        // Ignorerar hopp och kostnad för första versionen (BFS), och senare använder det för nästa version (djikstra)
+
+        // Steg 2. Välj en datastruktur för grafen
+        // Man måste lagra varje ruta och vilka rutor som går att nå direkt från den. Man kan göra det med en "adjacency list".
+        // Man kan representera en adjacency list med en Dictionary, där varje nyckel är en ruta och värdet är en lista över dess grannar
+        // (Dictionary<TKey = node/ ruta i labyrinten, TValue = lista med nodens grannar>. Dictionary<Vector2Int, List<Vector2Int>> graph;)
+        // Dictionary lagrar nyckel-värde-par, Vector2Int är nyckeln/ koordinaterna för en ruta, List<Vector2Int> är värdet/ rutans lista av grannar
+
+        // Steg 3. Skapa en tom graf (graf för sökning, inte själva labyrinten som redan finns)
+        // Ska skriva en hjälpfunktion för att ta emot mapData och retunera grafen.
+        // mapData.Width och MapData.Height anger hur många rutor labyrinten har, medan koordinaterna börjar på 0 (top left)
+        // Börja med en hjälp funktion som t.ex:private static Dictionary<Vector2Int, List<Vector2Int>> BuildGraph(IMapData mapData), placera under denna metod:
+
+        // Steg 4. Skapa en grannlista för varje ruta
+        // BuildGraph() måste fyllas med alla rutorna i labyrinten.
+        // Kan fylla metoden genom att skapa 2 loopar som går igenom varje koordinat (x och y) i labyrinten (går igenom varje ruta) och spara dem
+
+        // Steg 5. Lägg till vänster- och högergrannar
+        // efter loopen har lagt till rutan som nyckel och kopplat den till sin lista av grannar ( graph [currentNode] = neighbors; )
+        // skriv kod som:
+        // 1. kontrollerar att det finns en ruta till det hållet ( kolla steg 1, del 2: if (x > 0) { det finns en ruta till vänster } )
+        // 2. kontrollera att ingen vägg blockerar rörelsen åt det hållet ( kolla steg 1, del 3: HasVerticalWall() och HasHorizontalWall() )
+        // 3. om en ruta finns och vägen ditt är inte blockerad av en vägg, lägg till rutan till neighbors listan ( neighbors.Add(new Vector2Int(x - 1, y)); )
+
+        // Steg 6. Låt FindShortestPath använda grafen från BuildGraph för att köra BFS
+        // extra: använd stack för att visa den kortaste vägen
+        
+        // bygger grafen med hjälpfunktionen BuildGraph()
+        Dictionary<Vector2Int, List<Vector2Int>> graph = BuildGraph(mapData);
+
+        // failsafe
+        if (!graph.ContainsKey(start) || !graph.ContainsKey(goal))
+        {
+            Debug.LogWarning("Start- eller målnod finns inte i grafen!");
+            return new List<Vector2Int>();
+        }
+
+        // skapar datastruktur för BFS
+        Queue<Vector2Int> queue = new Queue<Vector2Int>();
+        HashSet<Vector2Int> visited = new HashSet<Vector2Int>();
+
+        // dictionary för att spara vägen tillbaka. TKey = current node, TValue = previous noden
+        Dictionary<Vector2Int, Vector2Int> parentMap = new Dictionary<Vector2Int, Vector2Int>();
+
+        // initiera sökningen med startnoden
+        queue.Enqueue(start);
+        visited.Add(start);
+
+        bool pathFound = false;
+
+        // BFS loopen
+        while (queue.Count > 0)
+        {
+            Vector2Int current = queue.Dequeue();
+
+            // sluta söka om man har redan hittat målet
+            if (current == goal)
+            {
+                pathFound = true;
+                break;
+            }
+
+            // gå igenom alla grannar till current node / rutan
+            foreach (Vector2Int neighbor in graph[current])
+            {
+                if (!visited.Contains(neighbor))
+                {
+                    visited.Add(neighbor);
+                    parentMap[neighbor] = current; // spara att den kom till neighbor noden från current noden
+                    queue.Enqueue(neighbor);
+                }
+            }
+        }
+
+        // redovisa vägen med stack
+        // failsafe
+        if (!pathFound)
+        {
+            Debug.LogWarning("Ingen väg kunde hittas mellan start och mål.");
+            return new List<Vector2Int>(); // Returnera tom lista om väg saknas
+        }
+
+        Stack<Vector2Int> pathStack = new Stack<Vector2Int>();
+        Vector2Int currentBacktrackNode = goal;
+
+        // backa från målet tills det når startnoden
+        while (currentBacktrackNode != start)
+        {
+            pathStack.Push(currentBacktrackNode);
+            currentBacktrackNode = parentMap[currentBacktrackNode];
+        }
+        pathStack.Push(start);  // lägger till start noden efter loopen till stacken
+
+        // konvertar stacken till en list
+        List<Vector2Int> shortestPath = new List<Vector2Int>();
+        while (pathStack.Count > 0)
+        {
+            shortestPath.Add(pathStack.Pop());
+        }
+
+        return shortestPath;
 
         Debug.LogWarning("FindShortestPath is not implemented.");
         return null;
+    }
+
+    // Hjälpfunktion för att bygga graf av labyrinten
+    private static Dictionary<Vector2Int, List<Vector2Int>> BuildGraph(IMapData mapData)
+    {
+        // börja med att skapa en tom dictionary för grafen
+        // TKey (<Vector2Int) = koordinaterna för rutan, TValue (List<Vector2Int>>) = lista av rutans grannar
+        Dictionary<Vector2Int, List<Vector2Int>> graph = new Dictionary<Vector2Int, List<Vector2Int>> ();
+
+        // for loopar som går igenom varje koordinat (x, y) i labyrinten (loopar så länge koordinaterna är mindre än labyrintens height och width)
+        for (int y = 0; y < mapData.Height; y++)
+        {
+            for (int x = 0; x < mapData.Width; x++)
+            {
+                // skapa koordinaterna för rutan loopen är på
+                Vector2Int currentNode = new Vector2Int (x, y);
+
+                // skapa en tom lista för rutans grannar
+                List<Vector2Int> neighbors = new List<Vector2Int> ();
+
+                // lägg till rutan som nyckel i grafen och koppla den till sin lista av grannar
+                graph [currentNode] = neighbors;
+
+                // Lägger till grannarna till neighbors listan
+                // om noden inte är utanför labyrinten (x > 0) och det är ingen vägg som blockerar vägen (!HasVerticalWall())
+                if (x > 0 && !mapData.HasVerticalWall(x, y))                        // vänster node
+                {
+                    // lägger till noden till currentNode's lista av neighbors
+                    // ( x - 1 eftersom den ligger vänster från currentNode, men samma y koordinat )
+                    neighbors.Add(new Vector2Int(x - 1, y));
+                }
+
+                // om noden inte är utanför labyrinten (x < mapData.Width - 1) och det är ingen vägg som blockerar vägen (!HasVerticalWall(x + 1))
+                // ( mapData.Width - 1 för att kontrollera att noden är inte utanför labyrintens width, och x + 1 för ? )
+                if (x < mapData.Width - 1 && !mapData.HasVerticalWall(x + 1, y))    // höger node
+                {
+                    // ( x + 1 eftersom den ligger höger från currentNode, men samma y koordinat )
+                    neighbors.Add(new Vector2Int(x + 1, y));
+                }
+
+                // om noden inte är utanför labyrinten (y > 0) och det är ingen vägg som blockerar vägen (!HasHorizontalWall())
+                if (y > 0 && !mapData.HasHorizontalWall(x, y))                      // under node
+                {
+                    // ( y - 1 eftersom den ligger under currentNode, men samma x koordinat )
+                    neighbors.Add(new Vector2Int(x, y - 1));
+                }
+
+                // om noden inte är utanför labyrinten (y < mapData.height - 1) och det är ingen vägg som blockerar vägen (!hasHorizontalWall(y + 1))
+                if (y < mapData.Height - 1 && !mapData.HasHorizontalWall(x, y + 1)) // ovan node
+                {
+                    // (y + 1 eftersom den ligger ovanför currentNode, men samma x koordinat )
+                    neighbors.Add(new Vector2Int(x, y + 1));
+                }
+            }
+        }
+
+        // retunera grafen som byggdes
+        return graph;
     }
 
     // bool metod som tar emot två positioner (from och to) och kollar om det är möjligt att förflytta sig direkt från from till to
