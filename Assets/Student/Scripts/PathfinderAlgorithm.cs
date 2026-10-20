@@ -52,7 +52,56 @@ public static class PathfindingAlgorithm
 
         // Steg 6. Låt FindShortestPath använda grafen från BuildGraph för att köra BFS
         // extra: använd stack för att visa den kortaste vägen
-        
+
+        // steg 7. Omvandla algorithmen från BFS till Djikstra
+        // BFS använder: Dictionary<Vector2Int, List<Vector2Int>> graph; för att lagra varje ruta och dess grannar.
+        // Djikstra måste veta vad en vägg kostar (weight). Så måste ändra från "gå till granne som är på shortestPath vägen" till "gå till granne med minst kostnad".
+        // 1. Bestäm hur grafen ska representeras (mer än bara nodes och grannar, nu med weight)
+        // Behåll grannlistan, men nu beräkna grannens weight innan "currentNode" tar steg mot grannen (kollar alla grannar -> vem har minst kostnad mot "goal"? -> gå ditt)
+        // IMapData har:
+        // * GetHorizontalWallCost(x, y)
+        // * GetVerticalWallCost(x, y)
+        // * GetJumpsFrom(from)
+        // * TryGetJumpCost(from, to, out cost)
+        // 
+        // graf regler:
+        // * Kostnad 1 (det kostar vanligt 1 för karaktären i labyrinten för att röra sig från en marker till en annan)
+        // * halvvägg (karaktären kan gå över en halv vägg för ca 5.5f kostnad)
+        // * vägg utan cost (en vägg har ingen kostnad, alltså karaktären kan inte gå igenom vägen eftersom varje "step" ska ha en kostnad)
+        // * direkthopp/ "teleport" (ett "jump" är en seperat, riktat förbindelse. Om hoppet går från A - B betyder det inte automatiskt att man kan hoppa från B - A, "oneway")
+        //
+        // Djikstra och Relax:
+        // två värden:
+        // * distTo, den hittills billigaste kända kostnaden från start till den rutan
+        // * edgeTo, vilken ruta karaktären kom från när den hittade den bästa vägen (previous node)
+        // I början av algorithmen, sätt alla rutors kostnader till oändlighet (IsMovementBlocked() har IsPositiveInfinity)
+        // och start rutan får kostnaden 0. Sen när karaktären kollar på en nod så ska grannens kostnad "förbättras" (Relax() metod)
+        // Relax:
+        // Ett exempel, karaktären har hittat en vägg till ruta A med kostnaden 3, och förflyttningen från A till B kostar 5.5, den nya
+        // möjliga kostnaden för B blir: 3 + 5.5 = 8.5
+        // Om B's tidigare kända kostnad var oändlig, är 8.5 förbättrad. Då uppdateras kostnaden och sparar A som B's föregegångare (previous node)
+        // In short, Relax metoden kontrollerar om en ny väg ger lägre kostnad än den bästa karaktären redan känner till.
+        // exempel kod:
+        // float newCost = distTo[current] + edgeCost;
+        // if (newCost < distTo[neighbor])
+        // {
+        //     distTo[neighbor] = newCost;
+        //     parentMap[neighbor] = current;
+        // }
+        //
+        // Behöver också en datastruktur som väljer nästa ruta med lägst känd kostnad, som en prioritetskö.
+
+        // Steg 8. Hur ska BFS omvandlas?
+        // behåller BFS grannlistan och beräknar kostnaden när en granne undersöks (start node = 0 kostnad -> kollar grannar -> vad är grannars kostnader?)
+        // kan skapa en Edge struct utanför PathfinderAlgorithm.cs för att beräkna vägen och kostnaden
+        // och en seperat BuildGraph() för att Djikstra ( BuildWeightedGraph() ) som använder den Edge structen
+        // exempel:
+        // * ingen vägg mellan node A och B: cost = 1
+        // * passerbar vägg mellan node A och B: cost = 5.5 (exempel värde)
+        // * omöjlig vägg mellan node A och B: cost = maxValue (kan inte gå till noden)
+        // * hopp från node A till B: cost = kostnaden som anges för jump
+
+
         // bygger grafen med hjälpfunktionen BuildGraph()
         Dictionary<Vector2Int, List<Vector2Int>> graph = BuildGraph(mapData);
 
@@ -74,6 +123,7 @@ public static class PathfindingAlgorithm
         queue.Enqueue(start);
         visited.Add(start);
 
+        // bool så att den bara söker efter path en gång
         bool pathFound = false;
 
         // BFS loopen
@@ -100,7 +150,6 @@ public static class PathfindingAlgorithm
             }
         }
 
-        // redovisa vägen med stack
         // failsafe
         if (!pathFound)
         {
@@ -127,9 +176,6 @@ public static class PathfindingAlgorithm
         }
 
         return shortestPath;
-
-        Debug.LogWarning("FindShortestPath is not implemented.");
-        return null;
     }
 
     // Hjälpfunktion för att bygga graf av labyrinten
@@ -190,6 +236,61 @@ public static class PathfindingAlgorithm
         return graph;
     }
 
+    // Hjälpfunktion för att bygga en viktad graf av labyrinten (för Djikstra)
+    private static Dictionary<Vector2Int, List<Edge>> BuildWeightedGraph(IMapData mapData)
+    {
+        // TKey (Vector2Int) = koordinaterna för rutan, TValue (List<Edge>) = lista av rutans viktade grannar
+        Dictionary<Vector2Int, List<Edge>> graph = new Dictionary<Vector2Int, List<Edge>> ();
+
+        // standard kostnad för ett steg i labyrinten
+        float stepCost = 1.0f;
+
+        // for-loop som går igenom varje koordinat (x, y) i labyrinten
+        for (int y = 0; y < mapData.Height; y++)
+        {
+            for (int x = 0; x < mapData.Width; x++)
+            {
+                // skapa koordinaterna för rutan loopen är på
+                Vector2Int currentNode = new Vector2Int(x, y);
+
+                // skapa en tom lista för rutans viktade grannar (Edges)
+                List<Edge> neighbors = new List<Edge>();
+
+                // lägg till rutan som nyckel i grafen och koppla den till sin lista av Edges (grannar)
+                graph[currentNode] = neighbors;
+
+                // Vänster Node
+                if (x > 0 && !mapData.HasVerticalWall(x, y))
+                {
+                    Vector2Int targetNode = new Vector2Int(x - 1, y);
+
+                    // skapar en Edge till koordinaten med kostnad
+                    neighbors.Add(new Edge(targetNode, stepCost));
+                }
+                // höger node
+                if (x < mapData.Width - 1 && !mapData.HasVerticalWall(x + 1, y))
+                {
+                    Vector2Int targetNode = new Vector2Int(x +1, y);
+                    neighbors.Add(new Edge(targetNode, stepCost));
+                }
+                // under node
+                if (y > 0 && !mapData.HasHorizontalWall(x, y))
+                {
+                    Vector2Int targetNode = new Vector2Int(x, y - 1);
+                    neighbors.Add(new Edge(targetNode, stepCost));
+                }
+                // ovan node
+                if (y < mapData.Height - 1 && !mapData.HasHorizontalWall(x, y + 1))
+                {
+                    Vector2Int targetNode = new Vector2Int(x, y + 1);
+                    neighbors.Add(new Edge(targetNode, stepCost));
+                }
+            }
+        }
+
+        return graph;
+    }
+
     // bool metod som tar emot två positioner (from och to) och kollar om det är möjligt att förflytta sig direkt från from till to
     // retunerar true om förflyttningen är blockerad eller ogiltig
     // retunerar false om förflyttningen är tillåten
@@ -232,6 +333,21 @@ public static class PathfindingAlgorithm
         int wallY = deltaY > 0 ? to.y : from.y;
         float horizontalWallCost = mapData.GetHorizontalWallCost(from.x, wallY);
         return float.IsPositiveInfinity(horizontalWallCost) || horizontalWallCost >= float.MaxValue;
+    }
+
+    // Edge struct för Djikstra, representerar förbindelse från en node till en annan (en node och dess grannar från grannlistan)
+    private struct Edge
+    {
+        public Vector2Int To;   // koordinaten för noden man provar att ta sig till
+        public float Cost;      // kostnaden för att förflytta sig från t.ex Node A -> B
+
+        // konstruktur för att skapa förbindelse för både destination och kostnad
+        // ( exempel: Edge edge = new Edge(new Vector2Int(3, 2), 5.5f);, betyder att förbindelsen leder till noden vid position (3, 2) och kostar 5.5f )
+        public Edge(Vector2Int to, float cost)
+        {
+            To = to;
+            Cost = cost;
+        }
     }
 }
 
