@@ -8,7 +8,7 @@ public static class PathfindingAlgorithm
     // Metoden har två versioner: BFS och Dijkstra
     //
     // BFS bygger en vanlig graf med BuildGraph()-metoden och använder en Queue för att
-    // undersöka noderna i den ordningen de upptäcks. Den hittar en väg med minst antal
+    // undersöka noderna i den ordning de upptäcks. Den hittar en väg med minst antal
     // kanter, där varje förflyttning räknas som ett steg.
     //
     // Dijkstra bygger en viktad graf med BuildWeightedGraph()-metoden och använder
@@ -18,15 +18,16 @@ public static class PathfindingAlgorithm
     // att gå bakåt från målet till starten.
     //
     // För att växla mellan algoritmerna måste man avkommentera versionen man vill testa
-    // (både versionerna är markerade med "//=====[Namn]====//") och kommentera ut den
+    // (båda versionerna är markerade med "//=====[Namn]====//") och kommentera ut den
     // andra versionen.
     // Just nu är Dijkstra versionen den aktiva och JsonLoader har kartan: ex2.json
     // som den aktiva kartan. Jag har lagt till 2 kartor, en av dem är "maskhål" kartan från canvas och
     // en karta som heter "testMap" som är bra för att visa skillnaden mellan Dijkstra och BFS.
     //
-    // Jag rekommenderar för att testa både Dijkstra och BFS så ändrar man den aktiva kartan till
-    // "testMap.json" genom att klicka på "JsonLoader" i Hierarchy-fönstret och skriva in
-    // "testMap.json" i Inspectorn där det står "File Name"
+    // Jag rekommenderar att testa både Dijkstra och BFS genom att ändra den aktiva kartan till
+    // "testMap.json" (skickade med den i inlämningen) genom att klicka på "JsonLoader" i Hierarchy-fönstret
+    // och skriva in "testMap.json" i Inspectorn där det står "File Name". Annars om du har en existerande
+    // karta för att testa algoritmer så är det såklart även bättre.
     public static List<Vector2Int> FindShortestPath(Vector2Int start, Vector2Int goal, IMapData mapData)
     {
         //=====[FindShortestPath: BFS versionen]=====//
@@ -208,7 +209,7 @@ public static class PathfindingAlgorithm
         return path;
     }
 
-    // Hjälpfunktion som bygger en grav av labyrinten för BFS.
+    // Hjälpfunktion som bygger en graf av labyrinten för BFS.
     // Grafen representeras av en Dictionary där varje nyckel är en nod
     // (rutans koordinater) och värdet är en lista med nodens grannar.
     //
@@ -292,7 +293,7 @@ public static class PathfindingAlgorithm
     // - Om det finns ett jump används dess kostnad (TryGetJumpCost)
     // - Annars hämtas väggkostnaden (GetVerticalWallCost(x, y)/ GetHorizontalWallCost(x, y).
     //   Om det inte finns någon vägg används standardkostnaden för ett steg (1.0f)
-    // - Och till slut så läggs jumps till grafen tillsamans med deras kostnader.
+    // - Och till slut så läggs jumps till grafen tillsammans med deras kostnader.
     private static Dictionary<Vector2Int, List<Edge>> BuildWeightedGraph(IMapData mapData)
     {
         // TKey (Vector2Int) = koordinaterna för rutan, TValue (List<Edge>) = lista av rutans viktade grannar
@@ -465,7 +466,7 @@ public static class PathfindingAlgorithm
     }
 
     // Struct för Dijkstra som representerar en viktad kant i grafen (Edge).
-    // Innehåller destionations noden (To) och kostnaden (Cost)
+    // Innehåller destinations noden (To) och kostnaden (Cost)
     // För att förflytta sig från currentNode till targetNode
     private struct Edge
     {
